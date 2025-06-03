@@ -1,78 +1,95 @@
 import streamlit as st
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 import re
 
-# Style rules
+# Define your style rules here
 STYLE_RULES = {
-    "font": "Arial",
-    "font_size": 24,
-    "character_limit": 300,
-    "forbidden_spellings": ["z. B.", "Du"],
-    "required_spellings": {
-        "z. B.": "z.B.",
-        "Du": "du"
-    }
+    "forbidden_patterns": [
+        r"z\.\s*B\.",  # matches z.B., z. B., z.\u00A0B. etc.
+        r"\bdu\b",
+        "Du"
+    ],
+    "min_font_size": 11,
+    "max_font_size": 22,
 }
 
-def normalize_text(text):
-    return re.sub(r"\s+", " ", text.strip()).lower()
+# Compile patterns once
+COMPILED_PATTERNS = [re.compile(p) for p in STYLE_RULES["forbidden_patterns"]]
 
 def check_slide(slide, slide_number):
     results = []
-    character_count = 0
 
     for shape in slide.shapes:
-        if shape.has_text_frame:
-            for paragraph in shape.text_frame.paragraphs:
+        if not shape.has_text_frame:
+            continue
+
+        for paragraph in shape.text_frame.paragraphs:
+            for run in paragraph.runs:
+                text = run.text.strip()
+
+            # Step 1: Build full paragraph text
+            paragraph_text = ''.join(run.text for run in paragraph.runs)
+
+            # Step 2: Search forbidden patterns in full paragraph
+            for pattern in COMPILED_PATTERNS:
+                matches = pattern.findall(paragraph_text)
+                for match in matches:
+                    # Step 3: Mark runs that contain part of the match
+                            for run in paragraph.runs:
+                                if any(char in match for char in run.text):
+                                    run.font.color.rgb = RGBColor(255, 0, 0)
+                            results.append([slide_number, "Forbidden Spelling", match, paragraph_text])
+
+
+
+                # Check font size
+                min_size = STYLE_RULES["min_font_size"]
+                max_size = STYLE_RULES["max_font_size"]
+                
+                too_small = False
+                too_large = False
                 for run in paragraph.runs:
-                    text = run.text.strip()
-                    normalized_text = normalize_text(text)
-                    character_count += len(text)
+                    font_size = run.font.size
+                    if font_size:
+                        size_pt = font_size.pt
+                        if size_pt < min_size:
+                            run.font.color.rgb = RGBColor(255, 0, 0)
+                            too_small = True
+                        elif size_pt > max_size:
+                            run.font.color.rgb = RGBColor(255, 0, 0)
+                            too_large = True
 
-                    # Debug: Print found text
-                    print(f"[Slide {slide_number}] Found text: '{text}'")
+                if too_small:
+                    results.append([slide_number, "Font Too Small", f"< {min_size}pt", paragraph.text])
+                if too_large:
+                    results.append([slide_number, "Font Too Large", f"> {max_size}pt", paragraph.text])
 
-                    # Font checks
-                    font = run.font.name or "Unknown"
-                    size = run.font.size.pt if run.font.size else None
-
-                    if font != STYLE_RULES["font"]:
-                        results.append([slide_number, "Font", font])
-                    if size and int(size) != STYLE_RULES["font_size"]:
-                        results.append([slide_number, "Font Size", f"{size:.1f} pt"])
-
-                    # Forbidden spellings
-                    for forbidden in STYLE_RULES["forbidden_spellings"]:
-                        if forbidden.lower() in normalized_text:
-                            results.append([slide_number, "Forbidden Spelling", forbidden])
-
-                    # Required spellings (wrong usage)
-                    for wrong, correct in STYLE_RULES["required_spellings"].items():
-                        if wrong.lower() in normalized_text and correct.lower() not in normalized_text:
-                            results.append([slide_number, "Incorrect Spelling", wrong])
-
-    if character_count > STYLE_RULES["character_limit"]:
-        results.append([slide_number, "Character Limit", f"{character_count} characters"])
-
-    return results
+                    return results
 
 def main():
-    st.title("🔍 PowerPoint Style Checker")
-    uploaded_file = st.file_uploader("Upload a PowerPoint file (.pptx)", type="pptx")
+    st.title("PowerPoint Style Checker")
+
+    uploaded_file = st.file_uploader("Upload a PowerPoint file", type=["pptx"])
 
     if uploaded_file:
         prs = Presentation(uploaded_file)
-        all_results = []
 
+        all_results = []
         for i, slide in enumerate(prs.slides, start=1):
-            st.write(f"📄 Checking Slide {i}...")
             all_results.extend(check_slide(slide, i))
 
+        # Save modified version
+        output_filename = "marked_output.pptx"
+        prs.save(output_filename)
+
         if all_results:
-            st.success(f"✅ Checked {len(prs.slides)} slides. Issues found:")
-            st.table(all_results)
+            st.subheader("Style Issues Found:")
+            for result in all_results:
+                st.write(f"Slide {result[0]}: ❌ {result[1]} → “{result[2]}” in: “{result[3]}”")
+            st.success(f"Modified presentation saved as: {output_filename}")
         else:
-            st.success("✅ All slides passed the style check! 🎉")
+            st.success("✅ No style issues found!")
 
 if __name__ == "__main__":
     main()
