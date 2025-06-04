@@ -75,6 +75,11 @@ def check_slide(slide, slide_number, seen_results):
                         seen_results.add(result)
                         results.append(result)
 
+                #check font family
+                font_name = run.font.name
+                if font_name and not font_name.startswith("+") and font_name != "Arial":
+                    results.append([slide_number, "Wrong Font Family", font_name, run.text])
+                print(font_name)
         return results
 
 def main():
