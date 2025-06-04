@@ -17,7 +17,7 @@ STYLE_RULES = {
 # Compile patterns once
 COMPILED_PATTERNS = [re.compile(p) for p in STYLE_RULES["forbidden_patterns"]]
 
-def check_slide(slide, slide_number):
+def check_slide(slide, slide_number, seen_results):
     results = []
 
     for shape in slide.shapes:
@@ -64,8 +64,18 @@ def check_slide(slide, slide_number):
                     results.append([slide_number, "Font Too Small", f"< {min_size}pt", paragraph.text])
                 if too_large:
                     results.append([slide_number, "Font Too Large", f"> {max_size}pt", paragraph.text])
+                
+                # Check font color
+                font_color = run.font.color.rgb
+                print(font_color)
+                if font_color and font_color != RGBColor(0, 46, 60):
+                    run.font.color.rgb = RGBColor(255, 0, 0)  # 🔴 Highlight in red
+                    result = (slide_number, "Font Color Not Black", str(font_color), text)
+                    if result not in seen_results:
+                        seen_results.add(result)
+                        results.append(result)
 
-                    return results
+        return results
 
 def main():
     st.title("PowerPoint Style Checker")
@@ -76,8 +86,9 @@ def main():
         prs = Presentation(uploaded_file)
 
         all_results = []
+        seen_results = set()
         for i, slide in enumerate(prs.slides, start=1):
-            all_results.extend(check_slide(slide, i))
+            all_results.extend(check_slide(slide, i, seen_results))
 
         # Save modified version
         output_filename = "marked_output.pptx"
