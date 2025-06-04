@@ -87,9 +87,18 @@ def main():
             st.subheader("Style Issues Found:")
             for result in all_results:
                 st.write(f"Slide {result[0]}: ❌ {result[1]} → “{result[2]}” in: “{result[3]}”")
-            st.success(f"Modified presentation saved as: {output_filename}")
         else:
             st.success("✅ No style issues found!")
 
+        # ✅ Download button for modified presentation
+        with open(output_filename, "rb") as f:
+            st.download_button(
+                label="📥 Download Corrected Presentation",
+                data=f,
+                file_name=output_filename,
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
+
 if __name__ == "__main__":
     main()
+
