@@ -12,15 +12,24 @@ STYLE_RULES = {
     ],
     "min_font_size": 11,
     "max_font_size": 22,
+    "allowed_fonts":["Arial", "Verdana", "Frutiger"]
 }
 
 # Compile patterns once
 COMPILED_PATTERNS = [re.compile(p) for p in STYLE_RULES["forbidden_patterns"]]
 
+def get_all_shapes(shapes):
+    all_shapes = []
+    for shape in shapes:
+        all_shapes.append(shape)
+        if shape.shape_type == 6:  # 6 = GROUP
+            all_shapes.extend(get_all_shapes(shape.shapes))
+    return all_shapes
+
 def check_slide(slide, slide_number, seen_results):
     results = []
 
-    for shape in slide.shapes:
+    for shape in get_all_shapes(slide.shapes):
         if not shape.has_text_frame:
             continue
 
@@ -35,52 +44,37 @@ def check_slide(slide, slide_number, seen_results):
             for pattern in COMPILED_PATTERNS:
                 matches = pattern.findall(paragraph_text)
                 for match in matches:
-                    # Step 3: Mark runs that contain part of the match
-                            for run in paragraph.runs:
-                                if any(char in match for char in run.text):
-                                    run.font.color.rgb = RGBColor(255, 0, 0)
-                            results.append([slide_number, "Forbidden Spelling", match, paragraph_text])
-
-
-
-                # Check font size
-                min_size = STYLE_RULES["min_font_size"]
-                max_size = STYLE_RULES["max_font_size"]
-                
-                too_small = False
-                too_large = False
-                for run in paragraph.runs:
-                    font_size = run.font.size
-                    if font_size:
-                        size_pt = font_size.pt
-                        if size_pt < min_size:
+                    for run in paragraph.runs:
+                        if any(char in match for char in run.text):
                             run.font.color.rgb = RGBColor(255, 0, 0)
-                            too_small = True
-                        elif size_pt > max_size:
-                            run.font.color.rgb = RGBColor(255, 0, 0)
-                            too_large = True
+                    results.append([slide_number, "Forbidden Spelling", match, paragraph_text])
 
-                if too_small:
-                    results.append([slide_number, "Font Too Small", f"< {min_size}pt", paragraph.text])
-                if too_large:
-                    results.append([slide_number, "Font Too Large", f"> {max_size}pt", paragraph.text])
-                
-                # Check font color
-                font_color = run.font.color.rgb
-                print(font_color)
-                if font_color and font_color != RGBColor(0, 46, 60):
-                    run.font.color.rgb = RGBColor(255, 0, 0)  # 🔴 Highlight in red
-                    result = (slide_number, "Font Color Not Black", str(font_color), text)
-                    if result not in seen_results:
-                        seen_results.add(result)
-                        results.append(result)
+            # Check font size
+            min_size = STYLE_RULES["min_font_size"]
+            max_size = STYLE_RULES["max_font_size"]
 
-                #check font family
-                font_name = run.font.name
-                if font_name and not font_name.startswith("+") and font_name != "Arial":
-                    results.append([slide_number, "Wrong Font Family", font_name, run.text])
-                print(font_name)
-        return results
+            too_small = False
+            too_large = False
+            for run in paragraph.runs:
+                font_size = run.font.size
+                print(f"Slide {slide_number} → Text: {run.text} | Size: {font_size}")
+                if font_size:
+                    size_pt = font_size.pt
+                    if size_pt < min_size:
+                        run.font.color.rgb = RGBColor(255, 0, 0)
+                        too_small = True
+                    elif size_pt > max_size:
+                        run.font.color.rgb = RGBColor(255, 0, 0)
+                        too_large = True
+
+            if too_small:
+                results.append([slide_number, "Font Too Small", f"< {min_size}pt", paragraph.text])
+            if too_large:
+                results.append([slide_number, "Font Too Large", f"> {max_size}pt", paragraph.text])
+
+    return results  # ✅ Correctly indented, only once, after all shapes are checked
+    
+
 
 def main():
     st.title("PowerPoint Style Checker")
